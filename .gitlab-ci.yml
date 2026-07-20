@@ -1,0 +1,33 @@
+stages:
+  - lint
+  - test
+
+default:
+  image: python:3.12-slim
+
+lint:
+  stage: lint
+  script:
+    - pip install ruff mypy
+    - ruff check backend/app
+    - mypy backend/app --ignore-missing-imports || true
+
+backend-tests:
+  stage: test
+  script:
+    - apt-get update && apt-get install -y libpango-1.0-0 libpangocairo-1.0-0 || true
+    - cd backend
+    - pip install -e '.[dev]'
+    # All LLM/MCP calls are mocked in fixtures; CI never calls paid APIs.
+    - pytest -q --tb=short
+
+frontend-tests:
+  stage: test
+  image: node:20-alpine
+  script:
+    - cd frontend
+    - npm install
+    - npm run test -- --run
+  rules:
+    - exists:
+        - frontend/package.json
