@@ -1,4 +1,7 @@
-const BASE = "/api";
+// API base: defaults to "/api" (served behind an Nginx reverse proxy in prod, or
+// the Vite dev proxy locally). Set VITE_API_BASE to an absolute backend URL
+// (e.g. https://my-api.onrender.com) when the dashboard talks to the API directly.
+const BASE = import.meta.env.VITE_API_BASE ?? "/api";
 const API_KEY = import.meta.env.VITE_API_KEY ?? "change-me";
 
 const authHeaders = { "X-API-Key": API_KEY };
@@ -17,7 +20,7 @@ export interface Evidence {
   quote: string;
 }
 export async function ingestFiling(form: FormData) {
-  const res = await fetch(`/api/filings/ingest`, {
+  const res = await fetch(`${BASE}/filings/ingest`, {
     method: "POST", headers: { "X-API-Key": API_KEY }, body: form });
   if (!res.ok) throw new Error(`ingest failed (${res.status})`);
   return res.json();
@@ -26,7 +29,7 @@ export async function ingestFiling(form: FormData) {
 export async function ingestUrl(body: {
   ticker: string; filing_type: string; fiscal_year: number; fiscal_quarter: string; url: string;
 }) {
-  const res = await fetch(`/api/filings/ingest-url`, {
+  const res = await fetch(`${BASE}/filings/ingest-url`, {
     method: "POST",
     headers: { "X-API-Key": API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify(body) });

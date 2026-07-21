@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     # --- Auth ---
     api_key: str = "change-me"
 
+    # --- CORS ---
+    # Comma-separated list of allowed browser origins for the dashboard.
+    # Use "*" to allow any origin (fine for a public demo; note "*" cannot be
+    # combined with credentialed requests, which this app does not use).
+    cors_origins: str = "http://localhost:5173"
+
     # --- MCP / integrations ---
     slack_mcp_token: str = ""
     slack_channel: str = "#compliance-alerts"
@@ -48,6 +54,11 @@ class Settings(BaseSettings):
     upload_dir: str = "/data/uploads"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse the comma-separated cors_origins string into a clean list."""
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 @lru_cache
 def get_settings() -> Settings:

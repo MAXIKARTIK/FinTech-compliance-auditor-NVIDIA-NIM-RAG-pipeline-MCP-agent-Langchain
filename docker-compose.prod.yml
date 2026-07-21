@@ -1,0 +1,20 @@
+# Production overlay for a single public host (e.g. Oracle Cloud Always Free VM).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What it changes vs the base (dev) compose:
+#   * frontend (Nginx) is published on port 80 -> the only public entrypoint.
+#   * the API is NO LONGER published to the public internet; the dashboard's
+#     Nginx reaches it over the internal compose network (service name "api"),
+#     so /docs stays reachable only via an SSH tunnel, not from the open web.
+#   * Postgres/Redis/Chroma remain bound to 127.0.0.1 (from the base file).
+services:
+  frontend:
+    ports:
+      - "80:80"
+
+  api:
+    # Override the base "8000:8000" (public) with a localhost-only bind.
+    # Reach Swagger UI with:  ssh -L 8000:localhost:8000 <user>@<vm-ip>  then http://localhost:8000/docs
+    ports:
+      - "127.0.0.1:8000:8000"

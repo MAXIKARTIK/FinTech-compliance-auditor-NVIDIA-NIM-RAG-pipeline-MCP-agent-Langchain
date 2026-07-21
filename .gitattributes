@@ -1,0 +1,6 @@
+# Shell scripts and container entrypoints MUST use LF, or they fail on Linux
+# and inside Alpine/Debian containers ("bad interpreter: /bin/sh^M").
+*.sh            text eol=lf
+docker-entrypoint.sh text eol=lf
+# Templates rendered by envsubst inside the container also stay LF.
+*.template      text eol=lf

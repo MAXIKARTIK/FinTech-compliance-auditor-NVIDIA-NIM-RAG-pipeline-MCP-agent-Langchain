@@ -1,8 +1,14 @@
 import os
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("API_KEY", "test-key")
-os.environ.setdefault("NVIDIA_API_KEY", "test-nvidia-key")   # any placeholder
+# Hermetic test config: force the values that determine test correctness so the
+# suite can't be broken by an ambient environment (e.g. a developer who has
+# exported the real .env for docker compose). These MUST override, not
+# setdefault -- otherwise a shell-exported API_KEY/DATABASE_URL leaks in and
+# causes spurious 401s / points the app at Postgres instead of in-memory SQLite.
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ["SYNC_DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["API_KEY"] = "test-key"
+os.environ.setdefault("NVIDIA_API_KEY", "test-nvidia-key")   # any placeholder; LLM calls are mocked
 os.environ.setdefault("LLM_PROVIDER", "nvidia")
 
 import pytest

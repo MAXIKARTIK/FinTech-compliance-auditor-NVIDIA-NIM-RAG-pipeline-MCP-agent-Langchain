@@ -1,4 +1,3 @@
-
 # Automated FinTech Corporate Compliance Auditor
 
 Backend + minimal dashboard that ingests financial-sector filings (10-K/10-Q PDFs or SEC URLs), isolates data per company/period in ChromaDB, audits statements against API-managed compliance rules (SOX/AML/KYC) using **metadata-filtered RAG + structured LLM reasoning on NVIDIA NIM (Nemotron)**, produces risk-scored audit reports (JSON + PDF), and runs a LangGraph agent that fetches filings from SEC EDGAR, queries audit history, and sends Slack alerts on critical findings.
@@ -145,5 +144,79 @@ Copy `.env.example` to `.env` and set:
 - `SEC_EDGAR_USER_AGENT` — required by SEC EDGAR (descriptive contact)
 
 Secrets live only in `.env` (gitignored); `.env.example` holds placeholders.
+
+## Deploy online (free)
+
+The whole system ships as one Docker Compose stack (`api`, `worker`, `postgres`,
+`redis`, `chromadb`, `frontend`), so the simplest deployment is to run that stack
+on a single host. The frontend container serves the built React app with **Nginx**
+and reverse-proxies `/api` to the backend, so only one public port is needed.
+
+**Production hardening already baked in:** Postgres/Redis/Chroma ports are bound to
+`127.0.0.1` (never exposed publicly on the host), every service has
+`restart: unless-stopped`, Alembic migrations run on `api` startup, and write
+endpoints require `X-API-Key`.
+
+### Recommended free path — Oracle Cloud Always Free VM + Compose
+A single **Oracle Cloud Always Free** VM (Ampere A1 Arm — up to 4 OCPU / 24 GB RAM,
+non-expiring) runs *every* feature — the Celery worker, ChromaDB, Postgres and
+Redis included — at no cost. Two helper scripts in [`deploy/`](deploy/) automate it.
+
+**Step 1 — create the VM (Oracle console):** launch an *Ampere A1* instance
+(Ubuntu 22.04+ recommended; allocate the full free shape for comfortable builds).
+
+**Step 2 — open the network (two layers — this is the #1 Oracle gotcha):**
+1. *Cloud layer:* in the VCN **Security List / NSG**, add an **Ingress rule**:
+   Source `0.0.0.0/0`, IP Protocol TCP, destination port **80** (and **443** for TLS).
+2. *Host layer:* handled automatically by `oracle-setup.sh` below.
+
+**Step 3 — bootstrap + deploy (on the VM):**
+```bash
+git clone <your-repo> && cd fintech
+chmod +x deploy/*.sh
+
+./deploy/oracle-setup.sh      # installs Docker + Compose, opens host firewall 80/443
+#   log out and back in once so the 'docker' group applies
+
+cp .env.example .env          # set NVIDIA_API_KEY, a strong API_KEY, CORS_ORIGINS
+./deploy/deploy.sh            # builds + starts the prod stack, waits for health, seeds
+```
+
+`deploy.sh` uses the production overlay
+[`docker-compose.prod.yml`](docker-compose.prod.yml): the dashboard is published
+on port **80** (the only public entrypoint) and the API is **not** exposed to the
+open internet — the frontend's Nginx reaches it over the internal compose network,
+so `/docs` is reachable only via an SSH tunnel
+(`ssh -L 8000:localhost:8000 <user>@<vm-ip>`). When it finishes, open
+`http://<vm-public-ip>/`.
+
+**HTTPS (optional):** put a free **Cloudflare Tunnel** in front (no extra open
+ports needed), or run Caddy/Traefik as a reverse proxy pointed at the `frontend`
+container. Set `CORS_ORIGINS` to your final `https://…` dashboard URL.
+
+### Managed PaaS alternatives (mind the free-tier limits)
+These are convenient but each has a catch for a stack with an always-on worker:
+
+| Platform | Fits this stack? | Free-tier catch (verify before relying on it) |
+|----------|------------------|-----------------------------------------------|
+| [Render](https://render.com/docs/free) | Partially | Web services sleep after ~15 min idle; free Postgres is deleted ~30 days after creation; background workers (needed for Celery) are a paid plan. |
+| [Railway](https://railway.app) | Yes | Only a small monthly trial credit — not free once the credit is used. |
+| [Fly.io](https://fly.io) | Yes | Credit card required; free machines are small (~256 MB RAM), tight for Chroma + WeasyPrint. |
+| Oracle Cloud Always Free | Yes | Card required at signup; genuinely free and non-expiring afterward. |
+
+If you prefer the fully-managed split (no worker on a paid plan), the pieces also
+run on free managed services: **Neon** (Postgres, persistent), **Upstash** (Redis),
+**Chroma Cloud** (vectors), a static-site host for the frontend, plus a container
+host that supports an always-on process for the worker. This needs a few connection
+strings in `.env` but no code changes. *(Free-tier terms change often — the linked
+docs are the source of truth. Content summarized for licensing compliance.)*
+
+### Pre-flight checklist
+- `API_KEY` set to a long random value (and matched by the dashboard's build arg).
+- `CORS_ORIGINS` set to your real dashboard URL (only needed if the browser calls
+  the API cross-origin; the bundled Nginx proxy keeps it same-origin).
+- `NVIDIA_API_KEY` set; Slack/EDGAR values set if you use those features.
+- Never commit `.env` (already gitignored). Rotate any key that has been shared.
+
 output example 
 <img width="1277" height="766" alt="outputexample" src="https://github.com/user-attachments/assets/b7977d39-f3a0-49a2-b4cb-fe41e75cd0f0" />

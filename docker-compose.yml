@@ -14,6 +14,7 @@ services:
         condition: service_healthy
       chromadb:
         condition: service_started
+    restart: unless-stopped
 
   worker:
     build: ./backend
@@ -28,6 +29,24 @@ services:
         condition: service_healthy
       chromadb:
         condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the static bundle at build time. VITE_API_BASE stays "/api"
+        # so the browser talks to nginx same-origin and nginx proxies to the api.
+        VITE_API_BASE: /api
+        VITE_API_KEY: ${API_KEY:-change-me}
+    ports:
+      - "5173:80"
+    environment:
+      API_UPSTREAM: http://api:8000   # nginx proxies /api/* here (server-side)
+      PORT: "80"
+    depends_on:
+      - api
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -35,8 +54,11 @@ services:
       POSTGRES_USER: compliance
       POSTGRES_PASSWORD: compliance
       POSTGRES_DB: compliance
+    # Bind to localhost only: reachable from the host for debugging, never exposed
+    # to the public internet on a deployed VM. Containers still talk over the
+    # internal compose network by service name.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -44,23 +66,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   chromadb:
     image: chromadb/chroma:latest
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
       - chroma_data:/chroma/chroma
+    restart: unless-stopped
 
 volumes:
   pg_data:
