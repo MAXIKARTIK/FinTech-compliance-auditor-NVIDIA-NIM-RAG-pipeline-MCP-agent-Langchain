@@ -211,6 +211,36 @@ front of the `frontend` container, then set `CORS_ORIGINS` to that `https://…`
 boot, so the whole stack (including the worker and tunnel) comes back automatically
 after the VM restarts — no extra setup needed.
 
+### 90-day free path — Google Cloud ($300 trial credit) + Compose
+Google's free trial grants **$300 in credit for 90 days** (its card check is
+usually smoother than Oracle's). Run the *same* Compose stack on a small VM — the
+credit easily covers ~3 months of an always-on 4 GB VM (~$25/mo ≈ ~$75 total),
+so it's ideal for a temporary live resume/GitHub link while you sort out a
+permanent host.
+
+> **Billing note (important):** a Compute Engine VM is billed for the time it is
+> *running*, not per request — it consumes credit 24/7 **even with zero visitors**.
+> That's fine here ($300 credit ≫ the ~$75 needed for 3 months), and when the trial
+> ends or the credit is used up, GCP **suspends** resources rather than charging
+> you (no auto-billing unless you manually upgrade). To stretch the credit, `stop`
+> the VM when idle and `start` it before an interview — the public URL is down
+> while it's stopped.
+
+Steps (reuses the exact same scripts as the Oracle path):
+1. Cloud Console → Compute Engine → Create instance: machine type **e2-medium**
+   (2 vCPU / 4 GB), boot disk **Ubuntu 22.04**, 30 GB. Create.
+2. SSH in (the browser **SSH** button, or `gcloud compute ssh`), then:
+   ```bash
+   git clone <your-repo> && cd fintech && chmod +x deploy/*.sh
+   ./deploy/oracle-setup.sh       # generic Ubuntu + Docker bootstrap (works on GCP too)
+   # log out/in once, then: cd fintech
+   cp .env.example .env           # set NVIDIA_API_KEY and a strong API_KEY
+   TUNNEL=1 ./deploy/deploy.sh     # free HTTPS via Cloudflare tunnel; prints the URL
+   ```
+   The Cloudflare tunnel is outbound, so you **don't** need to open any GCP VPC
+   firewall rule. (Prefer plain HTTP on port 80? Add a VPC firewall rule for
+   `tcp:80` and run `./deploy/deploy.sh` without `TUNNEL=1`.)
+
 ### No-credit-card path — Hugging Face Spaces (single container)
 When a card/identity check blocks the VM route, deploy the **same services** as a
 single free Docker container on **Hugging Face Spaces** (no card, public HTTPS).
