@@ -1,12 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.auth import require_api_key
 from app.schemas import SearchRequest
 from app.services.retriever import retrieve
 
 router = APIRouter(tags=["search"])
 
 
-@router.post("/search")
+@router.post("/search", dependencies=[Depends(require_api_key)])
 async def search(payload: SearchRequest) -> dict:
     """Debug endpoint (R2): metadata-isolated semantic search."""
     chunks = retrieve(

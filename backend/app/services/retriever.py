@@ -17,6 +17,12 @@ def build_where(ticker: str, filing_type: str, fiscal_year: int, fiscal_quarter:
         ]
     }
 
+def _order_key(chunk_id: str):
+    """Sort key: document order by trailing chunk index, stable for any id shape."""
+    tail = chunk_id.rsplit("-", 1)[-1]
+    return (0, int(tail)) if tail.isdigit() else (1, chunk_id)
+
+
 def retrieve(
     *, ticker, filing_type, fiscal_year, fiscal_quarter, query, k=5, collection=None, embeddings=None
 ):
@@ -30,4 +36,7 @@ def retrieve(
     )
     ids = res.get("ids") or [[]]
     docs = res.get("documents") or [[]]
-    return [{"chunk_id": i, "text": d} for i, d in zip(ids[0], docs[0])]
+    # Deterministic prompt order regardless of Chroma's similarity-hit ordering,
+    # so the same chunk set always yields the same prompt (and same verdict).
+    pairs = sorted(zip(ids[0], docs[0]), key=lambda p: _order_key(p[0]))
+    return [{"chunk_id": i, "text": d} for i, d in pairs]

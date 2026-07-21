@@ -5,6 +5,7 @@ then downgraded to needs_review. A rule is never silently dropped.
 """
 
 import json
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -59,7 +60,7 @@ def get_llm():
         api_key=s.nvidia_api_key,
         temperature=s.chat_temperature,
         top_p=s.chat_top_p,
-        max_tokens=s.reasoning_budget + 2048,
+        max_tokens=s.reasoning_budget + 4096,   # headroom so the JSON answer isn't truncated
         model_kwargs={
             "reasoning_budget": s.reasoning_budget,
             "chat_template_kwargs": {"enable_thinking": s.enable_thinking},
@@ -68,12 +69,42 @@ def get_llm():
 
 
 
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
 def _extract_json(content: str) -> dict:
-    start = content.find("{")
-    end = content.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError("no JSON object in LLM output")
-    return json.loads(content[start : end + 1])
+    """Parse the finding JSON out of a (possibly reasoning-wrapped) LLM response.
+
+    Robust to inline <think>...</think> traces, ```json fences, and stray braces
+    that appear before the real object, so a leaked reasoning trace can't make
+    parsing fail intermittently (which would silently flip a rule to needs_review).
+    """
+    text = _THINK_RE.sub("", content or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text[:4].lower() == "json":
+            text = text[4:]
+        text = text.strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # Fall back to the first balanced {...} object that parses.
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start : i + 1])
+                    except Exception:
+                        break
+        start = text.find("{", start + 1)
+    raise ValueError("no JSON object in LLM output")
 
 
 def evaluate_rule(
@@ -85,8 +116,22 @@ def evaluate_rule(
     chunks: list[dict],
     llm=None,
 ) -> RuleFinding:
+    if not chunks:
+        # No indexed text for this exact ticker/type/period. Evaluating with no
+        # evidence would produce an arbitrary verdict, so surface it explicitly
+        # instead of silently scoring against an empty document.
+        return RuleFinding(
+            rule_id=rule_id,
+            status="needs_review",
+            explanation=(
+                "No indexed excerpts were found for this filing/period; cannot "
+                "evaluate. Ingest the filing for this exact ticker/type/year/"
+                "quarter, then re-run the audit."
+            ),
+            confidence=0.0,
+        )
     llm = llm if llm is not None else get_llm()
-    context = "\n\n".join(f"[{c['chunk_id']}] {c['text']}" for c in chunks) or "(no excerpts found)"
+    context = "\n\n".join(f"[{c['chunk_id']}] {c['text']}" for c in chunks)
     prompt = PROMPT_TEMPLATE.format(
         title=title, regulation=regulation, check_prompt=check_prompt, context=context
     )

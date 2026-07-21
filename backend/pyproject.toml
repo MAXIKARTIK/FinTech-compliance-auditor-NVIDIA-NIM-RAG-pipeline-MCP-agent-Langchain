@@ -21,6 +21,7 @@ dependencies = [
     "langchain-text-splitters>=0.2",
     "langchain-nvidia-ai-endpoints>=0.3", 
     "langchain-openai>=0.1",
+    "langchain-anthropic>=0.1",
     "langgraph>=0.1",
     "weasyprint>=62",
     "jinja2>=3.1",

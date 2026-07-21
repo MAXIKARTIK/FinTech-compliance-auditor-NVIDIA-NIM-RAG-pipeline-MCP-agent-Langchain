@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import require_api_key
 from app.config import get_settings
@@ -75,7 +76,7 @@ async def get_report(run_id: str, db: AsyncSession = Depends(get_session)):
 @router.get("/report/{run_id}/pdf")
 async def get_report_pdf(run_id: str, db: AsyncSession = Depends(get_session)):
     report = await _load_report(run_id, db)
-    pdf = render_pdf(report)
+    pdf = await run_in_threadpool(render_pdf, report)
     return Response(
         content=pdf,
         media_type="application/pdf",

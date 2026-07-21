@@ -14,11 +14,13 @@ class Settings(BaseSettings):
     # --- LLM (NVIDIA NIM) ---
     llm_provider: str = "nvidia"
     nvidia_api_key: str = ""
+    openai_api_key: str = ""       # only used when llm_provider="openai"
+    anthropic_api_key: str = ""    # only used when llm_provider="anthropic"
     chat_model: str = "nvidia/nemotron-3-ultra-550b-a55b"
     reasoning_budget: int = 16384
     enable_thinking: bool = True
-    chat_temperature: float = 1.0        # used by get_llm
-    chat_top_p: float = 0.95             # used by get_llm
+    chat_temperature: float = 0.0        # deterministic scoring; >0 makes borderline rules flip between runs
+    chat_top_p: float = 1.0              # used by get_llm
 
     # --- Embeddings (NVIDIA NIM) ---
     embedding_model: str = "nvidia/nemotron-3-embed-1b"   # FIX: was nemotron-3-embed-8b (not hosted)
@@ -27,6 +29,11 @@ class Settings(BaseSettings):
 
     # --- Retrieval ---
     retrieval_top_k: int = 8             # used by audit_service
+
+    # --- Audit reproducibility ---
+    # Reuse a prior verdict when the same filing content is re-audited with the
+    # same rule version + model params, so identical re-runs score identically.
+    audit_reuse_findings: bool = True
 
     # --- Auth ---
     api_key: str = "change-me"

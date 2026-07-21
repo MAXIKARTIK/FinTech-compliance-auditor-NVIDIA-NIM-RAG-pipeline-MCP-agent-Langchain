@@ -1,0 +1,28 @@
+main
+--REMOTES--  
+origin	https://github.com/MAXIKARTIK/FinTech-compliance-auditor-NVIDIA-NIM-RAG-pipeline-MCP-agent-Langchain.git (fetch)
+origin	https://github.com/MAXIKARTIK/FinTech-compliance-auditor-NVIDIA-NIM-RAG-pipeline-MCP-agent-Langchain.git (push)
+--TRACKED-SECRETS(should-be-empty)--  
+.env.example
+--IGNORE-CHECK--  
+.env
+frontend/.env
+--STATUS--  
+ M .env.example
+ M backend/app/api/audit.py
+ M backend/app/api/search.py
+ M backend/app/auth.py
+ M backend/app/config.py
+ M backend/app/main.py
+ M backend/app/services/audit_service.py
+ M backend/app/services/rag_engine.py
+ M backend/app/services/retriever.py
+ M backend/app/services/vectorstore.py
+ M backend/pyproject.toml
+ M backend/scripts/demo.py
+ M backend/tests/test_rag.py
+?? gitinfo.txt
+?? status.txt
+--LOG--  
+dae75a1 FinTech Corporate Compliance Auditor
+===DONE=== 

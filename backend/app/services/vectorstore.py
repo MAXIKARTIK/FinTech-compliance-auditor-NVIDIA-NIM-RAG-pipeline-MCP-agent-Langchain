@@ -20,10 +20,26 @@ def get_chroma_client():
 def get_collection():
     return get_chroma_client().get_or_create_collection(COLLECTION_NAME)
 
+def _scope_where(meta: dict) -> dict:
+    """Metadata filter selecting every chunk belonging to one filing (ticker+period)."""
+    keys = ("ticker", "filing_type", "fiscal_year", "fiscal_quarter")
+    return {"$and": [{k: {"$eq": meta[k]}} for k in keys if k in meta]}
+
+
 def upsert_chunks(ids, documents, metadatas, embeddings=None):
+    if not ids:
+        return
     emb = embeddings or get_embeddings()
     batch = get_settings().embed_batch_size
     vectors: list[list[float]] = []
     for i in range(0, len(documents), batch):
         vectors.extend(emb.embed_documents(documents[i : i + batch]))   # passage mode, batched
-    get_collection().upsert(ids=ids, documents=documents, metadatas=metadatas, embeddings=vectors)
+    col = get_collection()
+    # Idempotent re-ingest (R1): drop any prior vectors for this filing scope first,
+    # so a shorter re-parse can't leave orphaned higher-index chunks behind.
+    if metadatas:
+        try:
+            col.delete(where=_scope_where(metadatas[0]))
+        except Exception:
+            pass
+    col.upsert(ids=ids, documents=documents, metadatas=metadatas, embeddings=vectors)

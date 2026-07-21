@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 
@@ -11,7 +13,7 @@ async def require_api_key(
     settings: Settings = Depends(get_settings),
 ) -> None:
     """Guard for all write endpoints (R9): requires a valid X-API-Key header."""
-    if not api_key or api_key != settings.api_key:
+    if not api_key or not secrets.compare_digest(api_key, settings.api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",

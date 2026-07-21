@@ -42,7 +42,7 @@ def test_malformed_output_falls_back_to_needs_review():
         title="Cert",
         regulation="SOX",
         check_prompt="certified?",
-        chunks=[],
+        chunks=[{"chunk_id": "c1", "text": "some filing text"}],
         llm=FakeLLM("this is not json at all"),
     )
     assert finding.status == "needs_review"

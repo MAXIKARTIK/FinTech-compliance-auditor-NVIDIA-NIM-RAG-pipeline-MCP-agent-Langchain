@@ -1,7 +1,7 @@
 """End-to-end demo: ingest a sample filing -> poll -> run audit -> print + export PDF.
 
 Run from the repo root (D:\\fintech) after `docker compose up` and seeding:
-    python backend/scripts/demo.py                 # uses samples/10kgoogle.pdf
+    python backend/scripts/demo.py                 # uses samples/pypl.pdf
     python backend/scripts/demo.py path/to/file.pdf
 """
 
@@ -25,7 +25,7 @@ def _load_api_key() -> str:
 
 HEADERS = {"X-API-Key": _load_api_key()}
 TICKER, TYPE, YEAR, QUARTER = "PYPL", "10-K", 2025, "FY"
-DEFAULT_PDF = "samples/10kgoogle.pdf"
+DEFAULT_PDF = "samples/pypl.pdf"
 
 def main(pdf_path: str) -> None:
     with open(pdf_path, "rb") as fh:
