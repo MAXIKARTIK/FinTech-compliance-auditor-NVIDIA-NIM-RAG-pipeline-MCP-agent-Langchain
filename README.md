@@ -152,6 +152,13 @@ The whole system ships as one Docker Compose stack (`api`, `worker`, `postgres`,
 on a single host. The frontend container serves the built React app with **Nginx**
 and reverse-proxies `/api` to the backend, so only one public port is needed.
 
+> **Canonical architecture = Docker Compose.** The multi-service Compose stack
+> (`docker-compose.yml`, hardened by `docker-compose.prod.yml`) is the source of
+> truth. Each hosting option below is just a *deployment target* for that same
+> stack. The Hugging Face target packages the identical services into a single
+> container only because HF Spaces currently runs one container per Space — the
+> code, data model, and services are unchanged.
+
 **Production hardening already baked in:** Postgres/Redis/Chroma ports are bound to
 `127.0.0.1` (never exposed publicly on the host), every service has
 `restart: unless-stopped`, Alembic migrations run on `api` startup, and write
@@ -203,6 +210,34 @@ front of the `frontend` container, then set `CORS_ORIGINS` to that `https://…`
 **Reboots:** every service has `restart: unless-stopped` and Docker is enabled on
 boot, so the whole stack (including the worker and tunnel) comes back automatically
 after the VM restarts — no extra setup needed.
+
+### No-credit-card path — Hugging Face Spaces (single container)
+When a card/identity check blocks the VM route, deploy the **same services** as a
+single free Docker container on **Hugging Face Spaces** (no card, public HTTPS).
+`supervisord` runs the full stack in one container (HF Spaces allows one container
+per Space); the public port is `7860` and Nginx proxies `/api` to the backend.
+
+```
+                         Browser
+                            │  (HTTPS, port 7860)
+                    Hugging Face Space
+                            │
+                     Docker container
+                            │
+                        supervisord
+      ┌───────────┬─────────┬──────────┬──────────┬──────────┐
+    nginx        api      worker      redis     postgres    chroma
+                  │
+              LangGraph → LangChain → NVIDIA NIM (external)
+```
+
+This is the *same* codebase and data model as the canonical Compose stack (above),
+just co-located in one container. Everything needed lives in
+[`deploy/hf-space/`](deploy/hf-space/) (`Dockerfile`, `supervisord.conf`,
+`nginx.conf`, `README.md`); the Dockerfile clones this repo at build time, so the
+Space itself only holds those four files. See that folder's README for the
+click-by-click steps. **Note:** free HF storage is ephemeral (Postgres/Chroma reset
+on restart), but migrations + demo seed re-run on every boot, so it self-heals.
 
 ### Managed PaaS alternatives (mind the free-tier limits)
 These are convenient but each has a catch for a stack with an always-on worker:

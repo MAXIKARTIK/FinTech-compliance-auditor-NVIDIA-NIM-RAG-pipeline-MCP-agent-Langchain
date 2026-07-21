@@ -40,6 +40,21 @@ async def _check_chroma(settings: Settings) -> str:
         return f"error: {type(exc).__name__}"
 
 
+async def _check_celery(settings: Settings) -> str:
+    """Best-effort liveness ping of Celery workers (bounded so /health never hangs)."""
+    import asyncio
+
+    try:
+        from app.worker import celery_app
+
+        replies = await asyncio.wait_for(
+            asyncio.to_thread(celery_app.control.ping, timeout=0.5), timeout=1.5
+        )
+        return "ok" if replies else "no workers"
+    except Exception as exc:  # pragma: no cover - env dependent
+        return f"error: {type(exc).__name__}"
+
+
 @router.get("/health")
 async def health(settings: Settings = Depends(get_settings)) -> dict:
     return {
@@ -47,4 +62,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict:
         "postgres": await _check_postgres(settings),
         "redis": await _check_redis(settings),
         "chroma": await _check_chroma(settings),
+        "celery": await _check_celery(settings),
+        "llm_provider": settings.llm_provider,
+        "model": settings.chat_model,
     }
