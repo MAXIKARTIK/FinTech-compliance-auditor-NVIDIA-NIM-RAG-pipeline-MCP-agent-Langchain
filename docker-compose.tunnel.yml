@@ -1,0 +1,18 @@
+# Optional overlay: instant, free, no-domain HTTPS via a Cloudflare Quick Tunnel.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                   -f docker-compose.tunnel.yml up -d --build
+#   (or simply:  TUNNEL=1 ./deploy/deploy.sh)
+#
+# cloudflared opens an OUTBOUND connection to Cloudflare and publishes a public
+# https://<random>.trycloudflare.com URL that proxies to the frontend container.
+# Because it's outbound, you do NOT need to open port 80/443 in the Oracle VCN
+# Security List for this to work. The URL is printed in the cloudflared logs and
+# changes each time the tunnel restarts (a named tunnel needs a CF account+domain).
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://frontend:80
+    depends_on:
+      - frontend
+    restart: unless-stopped

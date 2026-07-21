@@ -190,9 +190,19 @@ so `/docs` is reachable only via an SSH tunnel
 (`ssh -L 8000:localhost:8000 <user>@<vm-ip>`). When it finishes, open
 `http://<vm-public-ip>/`.
 
-**HTTPS (optional):** put a free **Cloudflare Tunnel** in front (no extra open
-ports needed), or run Caddy/Traefik as a reverse proxy pointed at the `frontend`
-container. Set `CORS_ORIGINS` to your final `https://…` dashboard URL.
+**Free HTTPS with no domain (recommended for a demo):** run the deploy with a
+**Cloudflare Quick Tunnel** — it publishes a public `https://<random>.trycloudflare.com`
+URL over an *outbound* connection, so you don't even need the port-80 ingress rule:
+```bash
+TUNNEL=1 ./deploy/deploy.sh      # prints the https://…trycloudflare.com URL at the end
+```
+The URL changes each time the tunnel restarts; for a stable custom domain use a
+named Cloudflare Tunnel (needs a CF account + domain) or run Caddy/Traefik in
+front of the `frontend` container, then set `CORS_ORIGINS` to that `https://…` URL.
+
+**Reboots:** every service has `restart: unless-stopped` and Docker is enabled on
+boot, so the whole stack (including the worker and tunnel) comes back automatically
+after the VM restarts — no extra setup needed.
 
 ### Managed PaaS alternatives (mind the free-tier limits)
 These are convenient but each has a catch for a stack with an always-on worker:

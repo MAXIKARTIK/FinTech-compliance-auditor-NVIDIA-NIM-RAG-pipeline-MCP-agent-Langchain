@@ -10,6 +10,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."   # repo root
 
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+# Set TUNNEL=1 to also start a free Cloudflare Quick Tunnel (public HTTPS URL,
+# no domain / no open ports needed).  e.g.  TUNNEL=1 ./deploy/deploy.sh
+if [ "${TUNNEL:-0}" = "1" ]; then
+    COMPOSE="$COMPOSE -f docker-compose.tunnel.yml"
+fi
 
 # --- 1. Ensure .env exists ------------------------------------------------
 if [ ! -f .env ]; then
@@ -74,3 +79,20 @@ echo "   API docs :  ssh -L 8000:localhost:8000 <user>@${PUBLIC_IP}  ->  http://
 echo ""
 echo " Manage:  $COMPOSE ps   |   logs:  $COMPOSE logs -f api worker"
 echo "=========================================================================="
+
+# --- 7. If a Cloudflare Quick Tunnel was requested, surface its public URL ---
+if [ "${TUNNEL:-0}" = "1" ]; then
+    echo "==> Waiting for the Cloudflare tunnel URL..."
+    url=""
+    for i in $(seq 1 20); do
+        url="$($COMPOSE logs cloudflared 2>/dev/null | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -n1 || true)"
+        [ -n "$url" ] && break
+        sleep 2
+    done
+    if [ -n "$url" ]; then
+        echo "   Public HTTPS dashboard:  $url"
+    else
+        echo "   Tunnel URL not found yet — check:  $COMPOSE logs cloudflared"
+    fi
+    echo "=========================================================================="
+fi
