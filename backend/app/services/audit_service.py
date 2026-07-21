@@ -168,8 +168,63 @@ def run_audit_sync(audit_run_id: str, session_factory=None) -> dict:
         return report_json(run, filing, findings)
 
 
+def _create_run(db, filing) -> str:
+    """Create a 'running' AuditRun snapshotting active rules + model params for a filing."""
+    rules = db.execute(select(Rule).where(Rule.is_active.is_(True))).scalars().all()
+    if not rules:
+        raise ValueError("no active compliance rules")
+    s = get_settings()
+    run = AuditRun(
+        filing_id=filing.id,
+        status="running",
+        model_name=s.chat_model,
+        model_params={
+            "reasoning_budget": s.reasoning_budget,
+            "enable_thinking": s.enable_thinking,
+            "temperature": s.chat_temperature,
+            "top_p": s.chat_top_p,
+            "retrieval_top_k": s.retrieval_top_k,
+        },
+        rule_versions={r.rule_id: r.version for r in rules},
+    )
+    db.add(run)
+    db.commit()
+    return run.id
+
+
+def create_and_run_audit(
+    ticker: str,
+    filing_type: str,
+    fiscal_year: int,
+    fiscal_quarter: str,
+    session_factory=None,
+) -> dict:
+    """Audit one exact filing identified by all four identity fields (no partial match)."""
+    factory = session_factory or get_sync_sessionmaker()
+    with factory() as db:
+        filing = (
+            db.execute(
+                select(Filing).where(
+                    Filing.ticker == ticker.upper(),
+                    Filing.filing_type == filing_type,
+                    Filing.fiscal_year == fiscal_year,
+                    Filing.fiscal_quarter == fiscal_quarter,
+                    Filing.status == "indexed",
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if filing is None:
+            raise ValueError(
+                f"no indexed filing for {ticker} {filing_type} {fiscal_quarter} FY{fiscal_year}"
+            )
+        run_id = _create_run(db, filing)
+    return run_audit_sync(run_id, session_factory=factory)
+
+
 def create_and_run_audit_for_latest_filing(ticker: str, session_factory=None) -> dict:
-    """Used by the MCP agent: audit the latest indexed filing with all active rules."""
+    """Fallback used by the MCP agent: audit the latest indexed filing for a ticker."""
     factory = session_factory or get_sync_sessionmaker()
     with factory() as db:
         filing = (
@@ -183,25 +238,5 @@ def create_and_run_audit_for_latest_filing(ticker: str, session_factory=None) ->
         )
         if filing is None:
             raise ValueError(f"no indexed filing for {ticker}")
-        rules = db.execute(select(Rule).where(Rule.is_active.is_(True))).scalars().all()
-        if not rules:
-            raise ValueError("no active compliance rules")
-
-        s = get_settings()
-        run = AuditRun(
-            filing_id=filing.id,
-            status="running",
-            model_name=s.chat_model,  # was s.llm_provider
-            model_params={
-                "reasoning_budget": s.reasoning_budget,
-                "enable_thinking": s.enable_thinking,
-                "temperature": s.chat_temperature,
-                "top_p": s.chat_top_p,
-                "retrieval_top_k": s.retrieval_top_k,
-            },
-            rule_versions={r.rule_id: r.version for r in rules},
-        )
-        db.add(run)
-        db.commit()
-        run_id = run.id
+        run_id = _create_run(db, filing)
     return run_audit_sync(run_id, session_factory=factory)

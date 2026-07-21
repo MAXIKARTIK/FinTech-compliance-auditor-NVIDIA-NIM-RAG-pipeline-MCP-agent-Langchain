@@ -31,9 +31,24 @@ async def node_fetch(state: AgentState) -> AgentState:
 async def node_audit(state: AgentState) -> AgentState:
     from app.services import audit_service
 
-    state["report"] = await asyncio.to_thread(
-        audit_service.create_and_run_audit_for_latest_filing, state["ticker"]
-    )
+    filing = state.get("filing") or {}
+    filing_type = filing.get("form")
+    fiscal_year = filing.get("fiscal_year")
+    fiscal_quarter = filing.get("fiscal_quarter")
+    if filing_type and fiscal_year and fiscal_quarter:
+        # Audit exactly the filing we just fetched/ingested (full 4-field scope),
+        # not merely the latest one that happens to share the ticker.
+        state["report"] = await asyncio.to_thread(
+            audit_service.create_and_run_audit,
+            state["ticker"],
+            filing_type,
+            fiscal_year,
+            fiscal_quarter,
+        )
+    else:
+        state["report"] = await asyncio.to_thread(
+            audit_service.create_and_run_audit_for_latest_filing, state["ticker"]
+        )
     return state
 
 
