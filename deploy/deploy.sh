@@ -15,6 +15,11 @@ COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
 if [ "${TUNNEL:-0}" = "1" ]; then
     COMPOSE="$COMPOSE -f docker-compose.tunnel.yml"
 fi
+# Set DUCKDNS=1 (with DUCKDNS_SUBDOMAIN + DUCKDNS_TOKEN in .env) for a free,
+# stable hostname that survives EC2 Stop/Start without a paid Elastic IP.
+if [ "${DUCKDNS:-0}" = "1" ]; then
+    COMPOSE="$COMPOSE -f docker-compose.duckdns.yml"
+fi
 
 # --- 1. Ensure .env exists ------------------------------------------------
 if [ ! -f .env ]; then

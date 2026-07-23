@@ -1,0 +1,18 @@
+# Optional overlay: free, stable hostname via DuckDNS — no paid Elastic IP needed.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                   -f docker-compose.duckdns.yml up -d --build
+#   (or:  DUCKDNS=1 ./deploy/deploy.sh)
+#
+# Set DUCKDNS_SUBDOMAIN and DUCKDNS_TOKEN in .env (from https://www.duckdns.org).
+# The container updates <sub>.duckdns.org to the host's current public IP on start
+# and every 5 minutes, so after an EC2 Stop/Start your link still resolves — with
+# NO Elastic IP charge. Your stable URL becomes http://<sub>.duckdns.org
+services:
+  duckdns:
+    image: linuxserver/duckdns:latest
+    environment:
+      - SUBDOMAINS=${DUCKDNS_SUBDOMAIN}
+      - TOKEN=${DUCKDNS_TOKEN}
+      - UPDATE_IP=ipv4
+    restart: unless-stopped
