@@ -10,11 +10,15 @@
 #   * Postgres/Redis/Chroma remain bound to 127.0.0.1 (from the base file).
 services:
   frontend:
-    ports:
+    # !override replaces the base port list (5173:80) instead of appending to it,
+    # so the dashboard is published only on 80.
+    ports: !override
       - "80:80"
 
   api:
-    # Override the base "8000:8000" (public) with a localhost-only bind.
+    # !override replaces the base "8000:8000" (all interfaces) with a localhost-only
+    # bind. Without !override, Compose *concatenates* the lists and the API tries to
+    # bind 8000 twice -> "address already in use".
     # Reach Swagger UI with:  ssh -L 8000:localhost:8000 <user>@<vm-ip>  then http://localhost:8000/docs
-    ports:
+    ports: !override
       - "127.0.0.1:8000:8000"
