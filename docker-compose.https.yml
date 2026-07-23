@@ -1,0 +1,33 @@
+# Optional overlay: automatic HTTPS via Caddy + Let's Encrypt for a public domain.
+#
+#   HTTPS=1 DUCKDNS=1 ./deploy/deploy.sh
+#
+# Requirements:
+#   * PUBLIC_DOMAIN set in .env  (e.g. fincompliance.duckdns.org)
+#   * ports 80 AND 443 open in the cloud firewall / security group
+#   * the domain must already resolve to this host (DuckDNS handles that)
+#
+# Caddy binds 80/443, fronts the internal frontend container, and auto-obtains +
+# renews a free Let's Encrypt certificate. The cert is cached in the caddy_data
+# volume, so it survives restarts (no re-issue / rate-limit issues on stop/start).
+services:
+  frontend:
+    # Frontend is no longer published on the host; Caddy sits in front of it.
+    ports: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    command: caddy reverse-proxy --from ${PUBLIC_DOMAIN} --to frontend:80
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -20,6 +20,11 @@ fi
 if [ "${DUCKDNS:-0}" = "1" ]; then
     COMPOSE="$COMPOSE -f docker-compose.duckdns.yml"
 fi
+# Set HTTPS=1 (with PUBLIC_DOMAIN in .env + ports 80/443 open) for automatic
+# free HTTPS via Caddy + Let's Encrypt.  e.g.  HTTPS=1 DUCKDNS=1 ./deploy/deploy.sh
+if [ "${HTTPS:-0}" = "1" ]; then
+    COMPOSE="$COMPOSE -f docker-compose.https.yml"
+fi
 
 # --- 1. Ensure .env exists ------------------------------------------------
 if [ ! -f .env ]; then
