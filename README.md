@@ -255,6 +255,15 @@ scripts as the Oracle/GCP paths apply.
 > even with zero visitors). Immediately set a **Billing → Budgets** alarm (e.g. $5)
 > and stop/terminate the instance when you're finished.
 
+**Conserve credit with Stop/Start (recommended for an interview-only demo):**
+Press **Stop** when idle and **Start** ~5 min before you present. While *stopped*
+you pay **no compute** (the ~$30/mo drops to $0) — only the EBS root disk (~$2.4/mo,
+which keeps your data) and the Elastic IP (~$3.6/mo). That's ≈ **$6/mo stopped**, so
+the $100–200 credit lasts the full 12 months. On **Start** the whole stack
+auto-recovers (every service is `restart: unless-stopped` and Docker starts on
+boot) in ~2–3 minutes, and your data persists on the EBS volume. Keep the **Elastic
+IP** so the link URL stays the same across stop/start.
+
 Steps (same kit as Oracle/GCP):
 1. EC2 → Launch instance: **Ubuntu 22.04**, type **t3.medium**, 30 GB gp3 disk;
    create/download a key pair.
