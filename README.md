@@ -147,193 +147,104 @@ Secrets live only in `.env` (gitignored); `.env.example` holds placeholders.
 
 ## Deploy online (free)
 
-The whole system ships as one Docker Compose stack (`api`, `worker`, `postgres`,
-`redis`, `chromadb`, `frontend`), so the simplest deployment is to run that stack
-on a single host. The frontend container serves the built React app with **Nginx**
-and reverse-proxies `/api` to the backend, so only one public port is needed.
+Everything runs as one Docker Compose stack: `api`, `worker`, `postgres`, `redis`,
+`chromadb`, and a `frontend` (Nginx serving the React build and proxying `/api` to
+the backend), so a single public port is enough. `docker-compose.yml` plus
+`docker-compose.prod.yml` is the actual deployment; the hosting options below just
+run that same stack. The Hugging Face variant bundles the services into one
+container because Spaces allows only one container per Space — same code, same data
+model.
 
-> **Canonical architecture = Docker Compose.** The multi-service Compose stack
-> (`docker-compose.yml`, hardened by `docker-compose.prod.yml`) is the source of
-> truth. Each hosting option below is just a *deployment target* for that same
-> stack. The Hugging Face target packages the identical services into a single
-> container only because HF Spaces currently runs one container per Space — the
-> code, data model, and services are unchanged.
+Prod defaults (`docker-compose.prod.yml`): Postgres/Redis/Chroma bind to
+`127.0.0.1`, every service uses `restart: unless-stopped`, Alembic migrations run on
+`api` startup, and write endpoints require `X-API-Key`.
 
-**Production hardening already baked in:** Postgres/Redis/Chroma ports are bound to
-`127.0.0.1` (never exposed publicly on the host), every service has
-`restart: unless-stopped`, Alembic migrations run on `api` startup, and write
-endpoints require `X-API-Key`.
+### Oracle Cloud Always Free (recommended)
+An Ampere A1 Always Free VM (up to 4 OCPU / 24 GB RAM, non-expiring) runs the whole
+stack — worker, ChromaDB, Postgres, Redis included — for free.
 
-### Recommended free path — Oracle Cloud Always Free VM + Compose
-A single **Oracle Cloud Always Free** VM (Ampere A1 Arm — up to 4 OCPU / 24 GB RAM,
-non-expiring) runs *every* feature — the Celery worker, ChromaDB, Postgres and
-Redis included — at no cost. Two helper scripts in [`deploy/`](deploy/) automate it.
-
-**Step 1 — create the VM (Oracle console):** launch an *Ampere A1* instance
-(Ubuntu 22.04+ recommended; allocate the full free shape for comfortable builds).
-
-**Step 2 — open the network (two layers — this is the #1 Oracle gotcha):**
-1. *Cloud layer:* in the VCN **Security List / NSG**, add an **Ingress rule**:
-   Source `0.0.0.0/0`, IP Protocol TCP, destination port **80** (and **443** for TLS).
-2. *Host layer:* handled automatically by `oracle-setup.sh` below.
-
-**Step 3 — bootstrap + deploy (on the VM):**
-```bash
-git clone <your-repo> && cd fintech
-chmod +x deploy/*.sh
-
-./deploy/oracle-setup.sh      # installs Docker + Compose, opens host firewall 80/443
-#   log out and back in once so the 'docker' group applies
-
-cp .env.example .env          # set NVIDIA_API_KEY, a strong API_KEY, CORS_ORIGINS
-./deploy/deploy.sh            # builds + starts the prod stack, waits for health, seeds
-```
-
-`deploy.sh` uses the production overlay
-[`docker-compose.prod.yml`](docker-compose.prod.yml): the dashboard is published
-on port **80** (the only public entrypoint) and the API is **not** exposed to the
-open internet — the frontend's Nginx reaches it over the internal compose network,
-so `/docs` is reachable only via an SSH tunnel
-(`ssh -L 8000:localhost:8000 <user>@<vm-ip>`). When it finishes, open
-`http://<vm-public-ip>/`.
-
-**Free HTTPS with no domain (recommended for a demo):** run the deploy with a
-**Cloudflare Quick Tunnel** — it publishes a public `https://<random>.trycloudflare.com`
-URL over an *outbound* connection, so you don't even need the port-80 ingress rule:
-```bash
-TUNNEL=1 ./deploy/deploy.sh      # prints the https://…trycloudflare.com URL at the end
-```
-The URL changes each time the tunnel restarts; for a stable custom domain use a
-named Cloudflare Tunnel (needs a CF account + domain) or run Caddy/Traefik in
-front of the `frontend` container, then set `CORS_ORIGINS` to that `https://…` URL.
-
-**Reboots:** every service has `restart: unless-stopped` and Docker is enabled on
-boot, so the whole stack (including the worker and tunnel) comes back automatically
-after the VM restarts — no extra setup needed.
-
-### 90-day free path — Google Cloud ($300 trial credit) + Compose
-Google's free trial grants **$300 in credit for 90 days** (its card check is
-usually smoother than Oracle's). Run the *same* Compose stack on a small VM — the
-credit easily covers ~3 months of an always-on 4 GB VM (~$25/mo ≈ ~$75 total),
-so it's ideal for a temporary live resume/GitHub link while you sort out a
-permanent host.
-
-> **Billing note (important):** a Compute Engine VM is billed for the time it is
-> *running*, not per request — it consumes credit 24/7 **even with zero visitors**.
-> That's fine here ($300 credit ≫ the ~$75 needed for 3 months), and when the trial
-> ends or the credit is used up, GCP **suspends** resources rather than charging
-> you (no auto-billing unless you manually upgrade). To stretch the credit, `stop`
-> the VM when idle and `start` it before an interview — the public URL is down
-> while it's stopped.
-
-Steps (reuses the exact same scripts as the Oracle path):
-1. Cloud Console → Compute Engine → Create instance: machine type **e2-medium**
-   (2 vCPU / 4 GB), boot disk **Ubuntu 22.04**, 30 GB. Create.
-2. SSH in (the browser **SSH** button, or `gcloud compute ssh`), then:
+1. Launch an Ampere A1 instance (Ubuntu 22.04+).
+2. Open the network in two places (the usual Oracle trip-up): a VCN Security List
+   ingress rule for TCP 80 (and 443 for TLS); the host firewall is handled by
+   `oracle-setup.sh`.
+3. On the VM:
    ```bash
    git clone <your-repo> && cd fintech && chmod +x deploy/*.sh
-   ./deploy/oracle-setup.sh       # generic Ubuntu + Docker bootstrap (works on GCP too)
-   # log out/in once, then: cd fintech
-   cp .env.example .env           # set NVIDIA_API_KEY and a strong API_KEY
-   TUNNEL=1 ./deploy/deploy.sh     # free HTTPS via Cloudflare tunnel; prints the URL
+   ./deploy/oracle-setup.sh      # Docker + Compose, opens the host firewall
+   # log out/in once so the docker group applies
+   cp .env.example .env          # NVIDIA_API_KEY, a strong API_KEY, CORS_ORIGINS
+   ./deploy/deploy.sh            # builds, starts, waits for health, seeds
    ```
-   The Cloudflare tunnel is outbound, so you **don't** need to open any GCP VPC
-   firewall rule. (Prefer plain HTTP on port 80? Add a VPC firewall rule for
-   `tcp:80` and run `./deploy/deploy.sh` without `TUNNEL=1`.)
 
-### Temporary path — AWS EC2 (signup credit) + Compose
-New AWS accounts get **$100 credit (up to $200 after onboarding tasks), valid 12
-months**. The free-tier micro instance (1 GB RAM) is **too small** for this stack,
-so run a **t3.medium (4 GB, ~$30/mo)** — or a budget **t3.small (2 GB, ~$15/mo,
-add swap)** — funded by that credit, which covers several months of an always-on
-demo. No project/stack changes are needed: EC2 is just an Ubuntu VM, so the same
-scripts as the Oracle/GCP paths apply.
+`deploy.sh` uses `docker-compose.prod.yml`: the dashboard is on port 80 and the API
+stays on the internal network (reach `/docs` with
+`ssh -L 8000:localhost:8000 <user>@<vm-ip>`). Open `http://<vm-public-ip>/` when it
+finishes.
 
-> **Billing warning:** unlike Google's trial (which *suspends* resources), **AWS
-> will charge your card** if the credit is used up or expires while the instance is
-> running. It also bills for VM *uptime*, not requests (a running instance costs
-> even with zero visitors). Immediately set a **Billing → Budgets** alarm (e.g. $5)
-> and stop/terminate the instance when you're finished.
+Free HTTPS without a domain: `TUNNEL=1 ./deploy/deploy.sh` starts a Cloudflare Quick
+Tunnel and prints a `https://<random>.trycloudflare.com` URL. It's outbound, so no
+port-80 rule is needed. The URL changes on restart; for a stable domain use a named
+Cloudflare Tunnel, or put Caddy/Traefik in front and set `CORS_ORIGINS` to it.
 
-**Conserve credit with Stop/Start (recommended for an interview-only demo):**
-Press **Stop** when idle and **Start** ~5 min before you present. While *stopped*
-you pay **no compute** (the ~$30/mo drops to $0) — only the EBS root disk (~$2.4/mo,
-which keeps your data) and the Elastic IP (~$3.6/mo). That's ≈ **$6/mo stopped**, so
-the $100–200 credit lasts the full 12 months. On **Start** the whole stack
-auto-recovers (every service is `restart: unless-stopped` and Docker starts on
-boot) in ~2–3 minutes, and your data persists on the EBS volume. Keep the **Elastic
-IP** so the link URL stays the same across stop/start.
+The stack auto-recovers after a reboot (`restart: unless-stopped` + Docker on boot).
 
-Steps (same kit as Oracle/GCP):
-1. EC2 → Launch instance: **Ubuntu 22.04**, type **t3.medium**, 30 GB gp3 disk;
-   create/download a key pair.
-2. Security group: allow inbound **TCP 22** (your IP) and **TCP 80** (`0.0.0.0/0`).
-3. For a stable resume link, allocate an **Elastic IP** and associate it.
-4. SSH in, then:
-   ```bash
-   git clone <your-repo> && cd fintech && chmod +x deploy/*.sh
-   ./deploy/oracle-setup.sh      # generic Ubuntu + Docker bootstrap (works on EC2)
-   # (t3.small only) add swap so it won't OOM:
-   #   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile \
-   #     && sudo mkswap /swapfile && sudo swapon /swapfile
-   # log out/in once, then: cd fintech
-   cp .env.example .env          # set NVIDIA_API_KEY and a strong API_KEY
-   ./deploy/deploy.sh            # dashboard on port 80  ->  http://<elastic-ip>/
-   ```
-   Prefer HTTPS with no open port? Use `TUNNEL=1 ./deploy/deploy.sh` for a free
-   Cloudflare tunnel instead of opening port 80.
-
-### No-credit-card path — Hugging Face Spaces (single container)
-When a card/identity check blocks the VM route, deploy the **same services** as a
-single free Docker container on **Hugging Face Spaces** (no card, public HTTPS).
-`supervisord` runs the full stack in one container (HF Spaces allows one container
-per Space); the public port is `7860` and Nginx proxies `/api` to the backend.
-
+### Google Cloud ($300 / 90-day trial)
+The same stack on an `e2-medium` (2 vCPU / 4 GB) Ubuntu VM; the credit covers about
+3 months (~$25/mo). A VM bills for uptime, not requests, so it uses credit around
+the clock even when idle — GCP suspends (rather than charges) when the trial ends,
+and you can stop the VM when idle to stretch the credit.
+```bash
+git clone <your-repo> && cd fintech && chmod +x deploy/*.sh
+./deploy/oracle-setup.sh        # generic Ubuntu + Docker bootstrap; works on GCP
+cp .env.example .env            # NVIDIA_API_KEY, a strong API_KEY
+TUNNEL=1 ./deploy/deploy.sh     # free HTTPS via Cloudflare tunnel
 ```
-                         Browser
-                            │  (HTTPS, port 7860)
-                    Hugging Face Space
-                            │
-                     Docker container
-                            │
-                        supervisord
-      ┌───────────┬─────────┬──────────┬──────────┬──────────┐
-    nginx        api      worker      redis     postgres    chroma
-                  │
-              LangGraph → LangChain → NVIDIA NIM (external)
+The tunnel is outbound, so no VPC firewall rule is needed (or open `tcp:80` and drop
+`TUNNEL=1` for plain HTTP).
+
+### AWS EC2 (signup credit)
+The free micro (1 GB) is too small; use `t3.medium` (4 GB) or `t3.small` (2 GB +
+swap), funded by the $100–200 signup credit. AWS bills for uptime and will charge the
+card once the credit runs out, so set a Billing → Budgets alarm and Stop the instance
+when idle. Open TCP 22 (your IP) and 80, and use an Elastic IP or a DuckDNS hostname
+for a stable URL across stop/start. Same scripts as above:
+```bash
+git clone <your-repo> && cd fintech && chmod +x deploy/*.sh
+./deploy/oracle-setup.sh        # works on EC2
+cp .env.example .env
+./deploy/deploy.sh              # http://<ip>/   (or TUNNEL=1 for free HTTPS)
 ```
+While stopped you pay only for the EBS disk (~$2.4/mo); on Start the stack recovers
+in ~2–3 min and data persists on the volume. On `t3.small`, add a 2 GB swapfile so
+it won't OOM.
 
-This is the *same* codebase and data model as the canonical Compose stack (above),
-just co-located in one container. Everything needed lives in
-[`deploy/hf-space/`](deploy/hf-space/) (`Dockerfile`, `supervisord.conf`,
-`nginx.conf`, `README.md`); the Dockerfile clones this repo at build time, so the
-Space itself only holds those four files. See that folder's README for the
-click-by-click steps. **Note:** free HF storage is ephemeral (Postgres/Chroma reset
-on restart), but migrations + demo seed re-run on every boot, so it self-heals.
+### Hugging Face Spaces (single container)
+`deploy/hf-space/` packages the whole stack into one container (supervisord runs
+nginx, api, worker, redis, postgres, chroma) on port 7860. The Space holds four files
+— `Dockerfile`, `supervisord.conf`, `nginx.conf`, `README.md` — and the Dockerfile
+clones this repo at build. Free storage is ephemeral, but migrations + seed re-run on
+boot. Note: as of 2026, running a Docker Space on the free CPU tier requires an HF
+PRO subscription.
 
-### Managed PaaS alternatives (mind the free-tier limits)
-These are convenient but each has a catch for a stack with an always-on worker:
+### Managed alternatives
+| Platform | Fits? | Catch |
+|----------|-------|-------|
+| Render | Partially | Web services sleep after ~15 min; free Postgres is deleted ~30 days after creation; the Celery worker needs a paid plan. |
+| Railway | Yes | One-time trial credit only; paid after that. |
+| Fly.io | Yes | Card required; free machines ~256 MB, tight for Chroma + WeasyPrint. |
+| Oracle Always Free | Yes | Card at signup; genuinely free and non-expiring afterward. |
 
-| Platform | Fits this stack? | Free-tier catch (verify before relying on it) |
-|----------|------------------|-----------------------------------------------|
-| [Render](https://render.com/docs/free) | Partially | Web services sleep after ~15 min idle; free Postgres is deleted ~30 days after creation; background workers (needed for Celery) are a paid plan. |
-| [Railway](https://railway.app) | Yes | Only a small monthly trial credit — not free once the credit is used. |
-| [Fly.io](https://fly.io) | Yes | Credit card required; free machines are small (~256 MB RAM), tight for Chroma + WeasyPrint. |
-| Oracle Cloud Always Free | Yes | Card required at signup; genuinely free and non-expiring afterward. |
+For a fully-managed split, the stateful pieces also run on free tiers — Neon
+(Postgres), Upstash (Redis), Chroma Cloud (vectors), a static host for the frontend,
+plus an always-on host for the worker — via connection strings in `.env`, no code
+changes.
 
-If you prefer the fully-managed split (no worker on a paid plan), the pieces also
-run on free managed services: **Neon** (Postgres, persistent), **Upstash** (Redis),
-**Chroma Cloud** (vectors), a static-site host for the frontend, plus a container
-host that supports an always-on process for the worker. This needs a few connection
-strings in `.env` but no code changes. *(Free-tier terms change often — the linked
-docs are the source of truth. Content summarized for licensing compliance.)*
-
-### Pre-flight checklist
-- `API_KEY` set to a long random value (and matched by the dashboard's build arg).
-- `CORS_ORIGINS` set to your real dashboard URL (only needed if the browser calls
-  the API cross-origin; the bundled Nginx proxy keeps it same-origin).
-- `NVIDIA_API_KEY` set; Slack/EDGAR values set if you use those features.
-- Never commit `.env` (already gitignored). Rotate any key that has been shared.
+### Before deploying
+- `API_KEY` long and random (and matched by the dashboard build arg).
+- `CORS_ORIGINS` set to your dashboard URL if the browser calls the API cross-origin
+  (the Nginx proxy keeps it same-origin otherwise).
+- `NVIDIA_API_KEY` set; Slack/EDGAR values if you use those features.
+- Keep `.env` out of git (already ignored) and rotate any key that's been shared.
 
 output example 
 <img width="1277" height="766" alt="outputexample" src="https://github.com/user-attachments/assets/b7977d39-f3a0-49a2-b4cb-fe41e75cd0f0" />
