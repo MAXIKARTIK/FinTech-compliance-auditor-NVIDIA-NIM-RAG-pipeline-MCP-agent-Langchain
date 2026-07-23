@@ -241,6 +241,39 @@ Steps (reuses the exact same scripts as the Oracle path):
    firewall rule. (Prefer plain HTTP on port 80? Add a VPC firewall rule for
    `tcp:80` and run `./deploy/deploy.sh` without `TUNNEL=1`.)
 
+### Temporary path — AWS EC2 (signup credit) + Compose
+New AWS accounts get **$100 credit (up to $200 after onboarding tasks), valid 12
+months**. The free-tier micro instance (1 GB RAM) is **too small** for this stack,
+so run a **t3.medium (4 GB, ~$30/mo)** — or a budget **t3.small (2 GB, ~$15/mo,
+add swap)** — funded by that credit, which covers several months of an always-on
+demo. No project/stack changes are needed: EC2 is just an Ubuntu VM, so the same
+scripts as the Oracle/GCP paths apply.
+
+> **Billing warning:** unlike Google's trial (which *suspends* resources), **AWS
+> will charge your card** if the credit is used up or expires while the instance is
+> running. It also bills for VM *uptime*, not requests (a running instance costs
+> even with zero visitors). Immediately set a **Billing → Budgets** alarm (e.g. $5)
+> and stop/terminate the instance when you're finished.
+
+Steps (same kit as Oracle/GCP):
+1. EC2 → Launch instance: **Ubuntu 22.04**, type **t3.medium**, 30 GB gp3 disk;
+   create/download a key pair.
+2. Security group: allow inbound **TCP 22** (your IP) and **TCP 80** (`0.0.0.0/0`).
+3. For a stable resume link, allocate an **Elastic IP** and associate it.
+4. SSH in, then:
+   ```bash
+   git clone <your-repo> && cd fintech && chmod +x deploy/*.sh
+   ./deploy/oracle-setup.sh      # generic Ubuntu + Docker bootstrap (works on EC2)
+   # (t3.small only) add swap so it won't OOM:
+   #   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile \
+   #     && sudo mkswap /swapfile && sudo swapon /swapfile
+   # log out/in once, then: cd fintech
+   cp .env.example .env          # set NVIDIA_API_KEY and a strong API_KEY
+   ./deploy/deploy.sh            # dashboard on port 80  ->  http://<elastic-ip>/
+   ```
+   Prefer HTTPS with no open port? Use `TUNNEL=1 ./deploy/deploy.sh` for a free
+   Cloudflare tunnel instead of opening port 80.
+
 ### No-credit-card path — Hugging Face Spaces (single container)
 When a card/identity check blocks the VM route, deploy the **same services** as a
 single free Docker container on **Hugging Face Spaces** (no card, public HTTPS).
