@@ -28,34 +28,110 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 ```
 
 ## Architecture
+## High-Level Architecture
+
 ```mermaid
 flowchart TB
-    UI[Dashboard React/Vite] --> API
 
-    subgraph API[FastAPI]
-      E1[POST /filings/ingest]
-      E6[POST /filings/ingest-url]
-      E2[CRUD /rules]
-      E3[POST /audit/run]
-      E4[GET /audit/report/:id]
-      E5[POST /agent/audit]
-    end
+%% ===========================
+%% Frontend
+%% ===========================
 
-    E1 --> RD[(Redis)]
-    E6 --> RD
-    RD --> CW[Celery Worker]
-    CW --> PARSE[pdfplumber / BeautifulSoup] --> CHUNK[chunk + metadata tag]
-    CHUNK --> EMB[NVIDIA Embeddings] --> CHROMA[(ChromaDB)]
+subgraph Frontend
+    UI["React + Vite Dashboard"]
+end
 
-    E2 --> PG[(PostgreSQL)]
-    E3 --> RET[metadata-filtered retrieval] --> CHROMA
-    RET --> LLM[Nemotron 3 Ultra - NVIDIA NIM] --> PG
+%% ===========================
+%% API Layer
+%% ===========================
 
-    E5 --> AGENT[LangGraph Agent]
-    AGENT --> EDGAR[SEC EDGAR fetch + ingest]
-    AGENT --> HIST[audit history - PostgreSQL]
-    AGENT --> SLACK[Slack alert]
-    AGENT --> RET
+subgraph API["FastAPI Backend"]
+
+INGEST["POST /filings/ingest"]
+INGESTURL["POST /filings/ingest-url"]
+RULES["CRUD /rules"]
+AUDIT["POST /audit/run"]
+REPORT["GET /audit/report/{id}"]
+AGENT["POST /agent/audit"]
+
+end
+
+UI --> API
+
+%% ===========================
+%% Async Ingestion Pipeline
+%% ===========================
+
+INGEST --> REDIS
+INGESTURL --> REDIS
+
+REDIS[(Redis Broker)]
+
+REDIS --> CELERY["Celery Worker"]
+
+CELERY --> PARSER["pdfplumber / BeautifulSoup"]
+
+PARSER --> CHUNK["Chunking + Metadata Tagging"]
+
+CHUNK --> EMBED["NVIDIA Embeddings"]
+
+EMBED --> CHROMA[(ChromaDB)]
+
+%% ===========================
+%% Metadata & Rules
+%% ===========================
+
+RULES --> POSTGRES[(PostgreSQL)]
+
+%% ===========================
+%% Audit Pipeline
+%% ===========================
+
+AUDIT --> LOADRULES["Load Compliance Rules"]
+
+LOADRULES --> POSTGRES
+
+AUDIT --> RETRIEVER["Metadata-filtered Retriever"]
+
+RETRIEVER --> CHROMA
+
+CHROMA --> CONTEXT["Relevant Chunks"]
+
+CONTEXT --> PROMPT["Prompt Builder"]
+
+POSTGRES --> PROMPT
+
+PROMPT --> LLM["NVIDIA NIM\nNemotron-3 Ultra"]
+
+LLM --> SCORE["Risk Scoring"]
+
+SCORE --> REPORTGEN["Generate JSON + PDF Report"]
+
+REPORTGEN --> POSTGRES
+
+REPORT --> POSTGRES
+
+%% ===========================
+%% LangGraph Agent
+%% ===========================
+
+AGENT --> LANGGRAPH["LangGraph Agent"]
+
+LANGGRAPH --> SEC["SEC EDGAR Fetch Tool"]
+
+LANGGRAPH --> AUDITTOOL["Audit Tool"]
+
+LANGGRAPH --> HISTORY["Audit History Tool"]
+
+LANGGRAPH --> SLACK["Slack Notification Tool"]
+
+SEC --> INGESTURL
+
+AUDITTOOL --> AUDIT
+
+HISTORY --> POSTGRES
+
+SLACK --> WEBHOOK["Slack Webhook"]
 ```
 
 ## Data model
